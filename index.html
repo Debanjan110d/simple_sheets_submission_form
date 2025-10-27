@@ -55,7 +55,9 @@
             <div class="form-group">
                 <label for="phone_number">Phone Number:</label>
                 <input id="phone_number" name="phone_number" type="tel" required placeholder="+91 (987) 654-3210"
-                    pattern="[0-9+\-\s()]*" inputmode="numeric" />
+                    pattern="[0-9+\-\s()]*" inputmode="numeric" minlength="10" maxlength="12" />
+                <small id="phone-error"
+                    style="color: #dc2626; display: none; margin-top: 4px; font-size: 13px;"></small>
             </div>
             <div class="form-group">
                 <label for="address">Address:</label>
@@ -76,6 +78,7 @@
         const statusMessage = document.getElementById('status-message');
         const hiddenIframe = document.getElementById('hidden_iframe');
         const phoneInput = document.getElementById('phone_number');
+        const phoneError = document.getElementById('phone-error');
 
         let received = false;
         let formSubmitted = false;
@@ -83,7 +86,33 @@
         // Phone number validation - only allow numbers, spaces, +, -, and ()
         phoneInput.addEventListener('input', (e) => {
             // Remove any characters that are not digits, +, -, spaces, or parentheses
-            e.target.value = e.target.value.replace(/[^0-9+\-\s()]/g, '');
+            let value = e.target.value.replace(/[^0-9+\-\s()]/g, '');
+
+            // Count only digits (excluding +, -, spaces, and parentheses)
+            const digitsOnly = value.replace(/[^0-9]/g, '');
+
+            // Limit to 12 digits maximum
+            if (digitsOnly.length > 12) {
+                // Keep only first 12 digits
+                const limitedDigits = digitsOnly.substring(0, 12);
+                // Reconstruct the value with formatting characters
+                let newValue = '';
+                let digitIndex = 0;
+                for (let char of value) {
+                    if (/[0-9]/.test(char)) {
+                        if (digitIndex < limitedDigits.length) {
+                            newValue += char;
+                            digitIndex++;
+                        }
+                    } else {
+                        newValue += char;
+                    }
+                }
+                value = newValue;
+            }
+
+            e.target.value = value;
+            validatePhoneNumber(digitsOnly.length);
         });
 
         // Additional validation on keypress to prevent non-numeric input
@@ -93,6 +122,55 @@
             if (!/[0-9+\-\s()]/.test(char)) {
                 e.preventDefault();
             }
+        });
+
+        // Validate phone number length
+        function validatePhoneNumber(digitCount) {
+            if (digitCount === 0) {
+                phoneError.textContent = 'Phone number is required';
+                phoneError.style.display = 'block';
+                phoneInput.setCustomValidity('Phone number is required');
+                return false;
+            } else if (digitCount < 10) {
+                phoneError.textContent = `Please enter at least 10 digits (currently ${digitCount})`;
+                phoneError.style.display = 'block';
+                phoneInput.setCustomValidity('Phone number must be at least 10 digits');
+                return false;
+            } else if (digitCount > 12) {
+                phoneError.textContent = 'Phone number cannot exceed 12 digits';
+                phoneError.style.display = 'block';
+                phoneInput.setCustomValidity('Phone number cannot exceed 12 digits');
+                return false;
+            } else {
+                phoneError.style.display = 'none';
+                phoneInput.setCustomValidity('');
+                return true;
+            }
+        }
+
+        // Validate on blur (when user leaves the field)
+        phoneInput.addEventListener('blur', () => {
+            const digitsOnly = phoneInput.value.replace(/[^0-9]/g, '');
+            validatePhoneNumber(digitsOnly.length);
+        });
+
+        // Prevent form submission if phone is invalid
+        form.addEventListener('submit', (e) => {
+            const digitsOnly = phoneInput.value.replace(/[^0-9]/g, '');
+            if (!validatePhoneNumber(digitsOnly.length)) {
+                e.preventDefault();
+                e.stopPropagation();
+                phoneInput.focus();
+                statusMessage.textContent = 'Please enter a valid phone number (10-12 digits)';
+                statusMessage.className = 'error';
+                return false;
+            }
+
+            formSubmitted = true;
+            received = false;
+            submitButton.disabled = true;
+            statusMessage.textContent = 'Sending, please wait...';
+            statusMessage.className = '';
         });
 
         // Theme Switcher
@@ -108,15 +186,6 @@
 
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
-        });
-
-        // When user submits: show sending state
-        form.addEventListener('submit', () => {
-            formSubmitted = true;
-            received = false;
-            submitButton.disabled = true;
-            statusMessage.textContent = 'Sending, please wait...';
-            statusMessage.className = '';
         });
 
         // Listen for message events from the iframe (Apps Script response uses postMessage)
